@@ -21,6 +21,7 @@ export interface IProduct {
   categoryId?: Types.ObjectId;
   avgRating: number;
   ratingCount: number;
+  salesCount: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -50,6 +51,7 @@ const productSchema = new Schema<IProduct>(
     categoryId: { type: Schema.Types.ObjectId, ref: "category" },
     avgRating: { type: Number, default: 0, min: 0, max: 5 },
     ratingCount: { type: Number, default: 0 },
+    salesCount: { type: Number, default: 0, min: 0 },
   },
   { timestamps: true }
 );

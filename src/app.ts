@@ -13,6 +13,7 @@ import productRouter from "./routers/product.js";
 import orderRouter from "./routers/order.js";
 import adminRouter from "./routers/admin.js";
 import userRouter from "./routers/user.js";
+import contactRouter from "./routers/contact.js";
 import { apiLimiter } from "./middlewares/rateLimit.js";
 
 const app = express();
@@ -64,6 +65,7 @@ app.use("/products", productRouter);
 app.use("/orders", orderRouter);
 app.use("/admin", adminRouter);
 app.use("/users", userRouter);
+app.use("/contact", contactRouter);
 
 // Health check
 app.get("/health", (_req, res) => {

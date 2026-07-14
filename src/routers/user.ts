@@ -51,7 +51,7 @@ userRouter.get("/stats", getUserStats);
 // Cart
 userRouter.get("/cart", getCart);
 userRouter.post("/cart", addToCart);
-userRouter.put("/cart", updateCartItem);
+userRouter.put("/cart/:productId", updateCartItem);
 userRouter.delete("/cart/:productId", removeFromCart);
 userRouter.delete("/cart", clearCart);
 

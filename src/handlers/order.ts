@@ -180,6 +180,17 @@ export async function updateOrderStatus(req: Request, res: Response): Promise<vo
     }
     order.status = status;
     order.statusHistory.push({ status, changedAt: new Date(), changedBy: adminId, note });
+
+    // ✅ Increment salesCount when order is delivered or completed
+    if (status === "delivered" || status === "completed") {
+      for (const item of order.products) {
+        await productModel.findByIdAndUpdate(
+          item.productId,
+          { $inc: { salesCount: item.quantity } }
+        );
+      }
+    }
+
     if (status === "cancelled") {
       for (const item of order.products) await productModel.findByIdAndUpdate(item.productId, { $inc: { stock: item.quantity } });
       order.cancellationReason = "Cancelled by admin";

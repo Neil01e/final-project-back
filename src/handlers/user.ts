@@ -200,7 +200,8 @@ export async function updateCartItem(req: Request, res: Response): Promise<void>
   try {
     const authReq = req as AuthenticatedRequest;
     const userId = authReq.user._id;
-    const { productId, quantity } = req.body;
+    const { productId } = req.params;
+const { quantity } = req.body;
     
     if (!productId) {
       errorResponse(res, null, "Product ID required", StatusCodes.BAD_REQUEST);
