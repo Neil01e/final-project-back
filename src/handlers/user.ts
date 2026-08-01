@@ -1,33 +1,23 @@
 import type { Request, Response } from "express";
 import { StatusCodes } from "http-status-codes";
 import userModel from "../models/user.js";
-import productModel from "../models/product.js";
-import { successResponse, errorResponse } from "../utils/responseFormatter.js";
-import { AuthenticatedRequest } from "../types/express.js";
+import { errorResponse, successResponse } from "../utils/responseFormatter.js";
 import { logger } from "../utils/logger.js";
 import { Types } from "mongoose";
-import orderModel from "../models/order.js";
-
-function toObjectId(id: string | string[] | undefined): Types.ObjectId {
-  if (!id || Array.isArray(id)) throw new Error("Invalid ObjectId");
-  return new Types.ObjectId(id);
-}
+import type { AuthenticatedRequest } from "../types/express.js";
+import type { CartItem } from "../types/models/user.js";
 
 export async function getProfile(req: Request, res: Response): Promise<void> {
   try {
     const authReq = req as AuthenticatedRequest;
     const userId = authReq.user._id;
-    const user = await userModel
-      .findById(userId)
-      .select("-password")
-      .populate("wishlist", "title coverImage price category")
-      .populate("products.favorites", "title coverImage price")
-      .populate("products.purchased", "title coverImage price")
-      .populate("cart.productId", "title price coverImage");
+    const user = await userModel.findById(userId).select("-password");
+
     if (!user) {
       errorResponse(res, null, "User not found", StatusCodes.NOT_FOUND);
       return;
     }
+
     successResponse(res, user, "Profile fetched successfully");
   } catch (error) {
     logger.error("Error fetching profile:", { error });
@@ -39,20 +29,19 @@ export async function updateProfile(req: Request, res: Response): Promise<void> 
   try {
     const authReq = req as AuthenticatedRequest;
     const userId = authReq.user._id;
-    const { firstName, lastName, phone, avatar, bio } = req.body;
-    const updateData: Record<string, unknown> = {};
-    if (firstName !== undefined) updateData.firstName = firstName;
-    if (lastName !== undefined) updateData.lastName = lastName;
-    if (phone !== undefined) updateData.phone = phone;
-    if (avatar !== undefined) updateData.avatar = avatar;
-    if (bio !== undefined) updateData.bio = bio;
-    const user = await userModel
-      .findByIdAndUpdate(userId, { $set: updateData }, { new: true })
-      .select("-password");
+    const { firstName, lastName, phone, bio } = req.body;
+
+    const user = await userModel.findByIdAndUpdate(
+      userId,
+      { firstName, lastName, phone, bio },
+      { new: true }
+    ).select("-password");
+
     if (!user) {
       errorResponse(res, null, "User not found", StatusCodes.NOT_FOUND);
       return;
     }
+
     successResponse(res, user, "Profile updated successfully");
   } catch (error) {
     logger.error("Error updating profile:", { error });
@@ -60,57 +49,28 @@ export async function updateProfile(req: Request, res: Response): Promise<void> 
   }
 }
 
-export async function addToWishlist(req: Request, res: Response): Promise<void> {
+export async function getUserStats(req: Request, res: Response): Promise<void> {
   try {
     const authReq = req as AuthenticatedRequest;
     const userId = authReq.user._id;
-    const { id } = req.params;
-    const product = await productModel.findById(id);
-    if (!product) {
-      errorResponse(res, null, "Product not found", StatusCodes.NOT_FOUND);
-      return;
-    }
-    const user = await userModel
-      .findByIdAndUpdate(userId, { $addToSet: { wishlist: toObjectId(id) } }, { new: true })
-      .populate("wishlist", "title coverImage price category");
-    successResponse(res, user?.wishlist, "Product added to wishlist");
-  } catch (error) {
-    logger.error("Error adding to wishlist:", { error });
-    errorResponse(res, error, "Failed to add to wishlist");
-  }
-}
 
-export async function removeFromWishlist(req: Request, res: Response): Promise<void> {
-  try {
-    const authReq = req as AuthenticatedRequest;
-    const userId = authReq.user._id;
-    const { id } = req.params;
-    const user = await userModel
-      .findByIdAndUpdate(userId, { $pull: { wishlist: toObjectId(id) } }, { new: true })
-      .populate("wishlist", "title coverImage price category");
-    successResponse(res, user?.wishlist, "Product removed from wishlist");
-  } catch (error) {
-    logger.error("Error removing from wishlist:", { error });
-    errorResponse(res, error, "Failed to remove from wishlist");
-  }
-}
-
-export async function getWishlist(req: Request, res: Response): Promise<void> {
-  try {
-    const authReq = req as AuthenticatedRequest;
-    const userId = authReq.user._id;
-    const user = await userModel
-      .findById(userId)
-      .select("wishlist")
-      .populate("wishlist", "title coverImage price category stock avgRating");
+    const user = await userModel.findById(userId);
     if (!user) {
       errorResponse(res, null, "User not found", StatusCodes.NOT_FOUND);
       return;
     }
-    successResponse(res, user.wishlist, "Wishlist fetched successfully");
+
+    const stats = {
+      cartItems: user.cart?.length || 0,
+      wishlistItems: user.wishlist?.length || 0,
+      purchasedProducts: user.products?.purchased?.length || 0,
+      favoriteProducts: user.products?.favorites?.length || 0,
+    };
+
+    successResponse(res, stats, "User stats fetched successfully");
   } catch (error) {
-    logger.error("Error fetching wishlist:", { error });
-    errorResponse(res, error, "Failed to fetch wishlist");
+    logger.error("Error fetching user stats:", { error });
+    errorResponse(res, error, "Failed to fetch user stats");
   }
 }
 
@@ -118,26 +78,18 @@ export async function getCart(req: Request, res: Response): Promise<void> {
   try {
     const authReq = req as AuthenticatedRequest;
     const userId = authReq.user._id;
-    
+
     const user = await userModel.findById(userId).populate("cart.productId", "title price coverImage");
-    
+
     if (!user) {
       errorResponse(res, null, "User not found", StatusCodes.NOT_FOUND);
       return;
     }
-    
-    const cartItems = user.cart.map((item: any) => ({
-      productId: item.productId._id,
-      title: item.productId.title,
-      price: item.productId.price,
-      quantity: item.quantity,
-      coverImage: item.productId.coverImage,
-    }));
-    
-    successResponse(res, cartItems, "Cart fetched");
-  } catch (error: any) {
-    console.error("getCart error:", error);
-    errorResponse(res, error, error.message || "Failed to fetch cart");
+
+    successResponse(res, user.cart, "Cart fetched successfully");
+  } catch (error) {
+    logger.error("Error fetching cart:", { error });
+    errorResponse(res, error, "Failed to fetch cart");
   }
 }
 
@@ -145,140 +97,108 @@ export async function addToCart(req: Request, res: Response): Promise<void> {
   try {
     const authReq = req as AuthenticatedRequest;
     const userId = authReq.user._id;
-    const { productId, quantity = 1 } = req.body;
-    
-    if (!productId) {
-      errorResponse(res, null, "Product ID required", StatusCodes.BAD_REQUEST);
-      return;
-    }
-    
-    const product = await productModel.findById(productId);
-    if (!product) {
-      errorResponse(res, null, "Product not found", StatusCodes.NOT_FOUND);
-      return;
-    }
-    
+    const { productId, quantity } = req.body;
+
     const user = await userModel.findById(userId);
+
     if (!user) {
       errorResponse(res, null, "User not found", StatusCodes.NOT_FOUND);
       return;
     }
-    
-    const existingItem = user.cart.find(
-      (item) => item.productId.toString() === productId
-    );
-    
+
+    const existingItem = user.cart?.find((item) => item.productId.toString() === productId);
+
     if (existingItem) {
       existingItem.quantity += quantity;
     } else {
-      user.cart.push({
+      user.cart?.push({
         productId: new Types.ObjectId(productId),
-        quantity: quantity,
+        quantity,
+        addedAt: new Date(),
       });
     }
-    
+
     await user.save();
-    
-    const updatedUser = await userModel.findById(userId).populate("cart.productId", "title price coverImage");
-    
-    const cartItems = updatedUser.cart.map((item: any) => ({
-      productId: item.productId._id,
-      title: item.productId.title,
-      price: item.productId.price,
-      quantity: item.quantity,
-      coverImage: item.productId.coverImage,
-    }));
-    
-    successResponse(res, cartItems, "Added to cart");
-  } catch (error: any) {
-    console.error("addToCart error:", error);
-    errorResponse(res, error, error.message || "Failed to add to cart");
+    const updatedUser = await userModel.findById(userId).populate("cart.productId");
+
+    successResponse(res, updatedUser?.cart, "Item added to cart");
+  } catch (error) {
+    logger.error("Error adding to cart:", { error });
+    errorResponse(res, error, "Failed to add item to cart");
   }
 }
 
 export async function updateCartItem(req: Request, res: Response): Promise<void> {
   try {
     const authReq = req as AuthenticatedRequest;
-    const userId = authReq.user._id;
     const { productId } = req.params;
-const { quantity } = req.body;
-    
-    if (!productId) {
-      errorResponse(res, null, "Product ID required", StatusCodes.BAD_REQUEST);
-      return;
-    }
-    
-    if (quantity <= 0) {
-      errorResponse(res, null, "Quantity must be positive", StatusCodes.BAD_REQUEST);
-      return;
-    }
-    
+    const { quantity } = req.body;
+    const userId = authReq.user._id;
+
     const user = await userModel.findById(userId);
+
     if (!user) {
       errorResponse(res, null, "User not found", StatusCodes.NOT_FOUND);
       return;
     }
-    
-    const cartItem = user.cart.find((item) => item.productId.toString() === productId);
+
+    const cartItem = user.cart?.find((item) => item.productId.toString() === productId);
+
     if (!cartItem) {
       errorResponse(res, null, "Item not found in cart", StatusCodes.NOT_FOUND);
       return;
     }
-    
+
     cartItem.quantity = quantity;
     await user.save();
-    
-    const updatedUser = await userModel.findById(userId).populate("cart.productId", "title price coverImage");
-    
-    const cartItems = updatedUser.cart.map((item: any) => ({
-      productId: item.productId._id,
-      title: item.productId.title,
-      price: item.productId.price,
+
+    const updatedUser = await userModel.findById(userId).populate("cart.productId");
+
+    if (!updatedUser) {
+      errorResponse(res, null, "User not found", StatusCodes.NOT_FOUND);
+      return;
+    }
+
+    const cartItems = updatedUser.cart.map((item: CartItem) => ({
+      productId: item.productId,
       quantity: item.quantity,
-      coverImage: item.productId.coverImage,
+      addedAt: item.addedAt,
     }));
-    
-    successResponse(res, cartItems, "Cart updated");
-  } catch (error: any) {
-    console.error("updateCartItem error:", error);
-    errorResponse(res, error, error.message || "Failed to update cart");
+
+    successResponse(res, cartItems, "Cart item updated");
+  } catch (error) {
+    logger.error("Error updating cart item:", { error });
+    errorResponse(res, error, "Failed to update cart item");
   }
 }
 
 export async function removeFromCart(req: Request, res: Response): Promise<void> {
   try {
     const authReq = req as AuthenticatedRequest;
-    const userId = authReq.user._id;
     const { productId } = req.params;
-    
-    if (!productId) {
-      errorResponse(res, null, "Product ID required", StatusCodes.BAD_REQUEST);
-      return;
-    }
-    
+    const userId = authReq.user._id;
+
     const user = await userModel.findById(userId);
+
     if (!user) {
       errorResponse(res, null, "User not found", StatusCodes.NOT_FOUND);
       return;
     }
-    
-    user.cart = user.cart.filter((item) => item.productId.toString() !== productId);
+
+    user.cart = user.cart?.filter((item) => item.productId.toString() !== productId) || [];
     await user.save();
-    
-    const updatedUser = await userModel.findById(userId).populate("cart.productId", "title price coverImage");
-    
-    const cartItems = updatedUser.cart.map((item: any) => ({
-      productId: item.productId._id,
-      title: item.productId.title,
-      price: item.productId.price,
-      quantity: item.quantity,
-      coverImage: item.productId.coverImage,
-    }));
-    
-    successResponse(res, cartItems, "Removed from cart");
-  } catch (error: any) {
-    console.error("removeFromCart error:", error);
-    errorResponse(res, error, error.message || "Failed to remove from cart");
+
+    const updatedUser = await userModel.findById(userId).populate("cart.productId");
+
+    if (!updatedUser) {
+      errorResponse(res, null, "User not found", StatusCodes.NOT_FOUND);
+      return;
+    }
+
+    successResponse(res, updatedUser.cart, "Item removed from cart");
+  } catch (error) {
+    logger.error("Error removing from cart:", { error });
+    errorResponse(res, error, "Failed to remove item from cart");
   }
 }
 
@@ -286,49 +206,82 @@ export async function clearCart(req: Request, res: Response): Promise<void> {
   try {
     const authReq = req as AuthenticatedRequest;
     const userId = authReq.user._id;
-    
-    const user = await userModel.findById(userId);
+
+    await userModel.findByIdAndUpdate(userId, { cart: [] });
+
+    successResponse(res, [], "Cart cleared successfully");
+  } catch (error) {
+    logger.error("Error clearing cart:", { error });
+    errorResponse(res, error, "Failed to clear cart");
+  }
+}
+
+export async function getWishlist(req: Request, res: Response): Promise<void> {
+  try {
+    const authReq = req as AuthenticatedRequest;
+    const userId = authReq.user._id;
+
+    const user = await userModel.findById(userId).populate("wishlist");
+
     if (!user) {
       errorResponse(res, null, "User not found", StatusCodes.NOT_FOUND);
       return;
     }
-    
-    user.cart = [];
-    await user.save();
-    
-    successResponse(res, [], "Cart cleared");
-  } catch (error: any) {
-    console.error("clearCart error:", error);
-    errorResponse(res, error, error.message || "Failed to clear cart");
+
+    successResponse(res, user.wishlist, "Wishlist fetched successfully");
+  } catch (error) {
+    logger.error("Error fetching wishlist:", { error });
+    errorResponse(res, error, "Failed to fetch wishlist");
   }
 }
 
-export async function getUserStats(req: Request, res: Response): Promise<void> {
+export async function addToWishlist(req: Request, res: Response): Promise<void> {
   try {
     const authReq = req as AuthenticatedRequest;
+    const { id } = req.params;
     const userId = authReq.user._id;
-    const [totalOrders, completedOrders, totalSpent, wishlistCount] = await Promise.all([
-      orderModel.countDocuments({ userId }),
-      orderModel.countDocuments({ userId, status: "completed" }),
-      orderModel.aggregate([
-        { $match: { userId: toObjectId(userId), status: "completed" } },
-        { $group: { _id: null, total: { $sum: "$totalPrice" } } },
-      ]),
-      userModel.findById(userId).select("wishlist"),
-    ]);
-    successResponse(
-      res,
-      {
-        totalOrders,
-        completedOrders,
-        totalSpent: totalSpent[0]?.total || 0,
-        wishlistCount: wishlistCount?.wishlist?.length || 0,
-      },
-      "User stats fetched successfully"
-    );
+
+    const user = await userModel.findById(userId);
+
+    if (!user) {
+      errorResponse(res, null, "User not found", StatusCodes.NOT_FOUND);
+      return;
+    }
+
+    if (!user.wishlist.includes(new Types.ObjectId(id))) {
+      user.wishlist.push(new Types.ObjectId(id));
+      await user.save();
+    }
+
+    const updatedUser = await userModel.findById(userId).populate("wishlist");
+    successResponse(res, updatedUser?.wishlist, "Item added to wishlist");
   } catch (error) {
-    logger.error("Error fetching user stats:", { error });
-    errorResponse(res, error, "Failed to fetch user stats");
+    logger.error("Error adding to wishlist:", { error });
+    errorResponse(res, error, "Failed to add item to wishlist");
+  }
+}
+
+export async function removeFromWishlist(req: Request, res: Response): Promise<void> {
+  try {
+    const authReq = req as AuthenticatedRequest;
+    const { id } = req.params;
+    const userId = authReq.user._id;
+
+    const user = await userModel.findById(userId);
+
+    if (!user) {
+      errorResponse(res, null, "User not found", StatusCodes.NOT_FOUND);
+      return;
+    }
+
+    user.wishlist = user.wishlist.filter((item) => item.toString() !== id);
+    await user.save();
+
+    const updatedUser = await userModel.findById(userId).populate("wishlist");
+    successResponse(res, updatedUser?.wishlist, "Item removed from wishlist");
+  } catch (error) {
+    logger.error("Error removing from wishlist:", { error });
+    errorResponse(res, error, "Failed to remove item from wishlist");
   }
 }
 
@@ -336,14 +289,22 @@ export async function updateAvatar(req: Request, res: Response): Promise<void> {
   try {
     const authReq = req as AuthenticatedRequest;
     const userId = authReq.user._id;
+
     if (!req.file) {
       errorResponse(res, null, "No file uploaded", StatusCodes.BAD_REQUEST);
       return;
     }
+
     const avatarUrl = `/uploads/${req.file.filename}`;
-    const user = await userModel
-      .findByIdAndUpdate(userId, { avatar: avatarUrl }, { new: true })
-      .select("-password");
+    const user = await userModel.findByIdAndUpdate(userId, { avatar: avatarUrl }, { new: true }).select(
+      "-password"
+    );
+
+    if (!user) {
+      errorResponse(res, null, "User not found", StatusCodes.NOT_FOUND);
+      return;
+    }
+
     successResponse(res, user, "Avatar updated successfully");
   } catch (error) {
     logger.error("Error updating avatar:", { error });
@@ -355,9 +316,16 @@ export async function removeAvatar(req: Request, res: Response): Promise<void> {
   try {
     const authReq = req as AuthenticatedRequest;
     const userId = authReq.user._id;
-    const user = await userModel
-      .findByIdAndUpdate(userId, { avatar: "" }, { new: true })
-      .select("-password");
+
+    const user = await userModel.findByIdAndUpdate(userId, { avatar: "" }, { new: true }).select(
+      "-password"
+    );
+
+    if (!user) {
+      errorResponse(res, null, "User not found", StatusCodes.NOT_FOUND);
+      return;
+    }
+
     successResponse(res, user, "Avatar removed successfully");
   } catch (error) {
     logger.error("Error removing avatar:", { error });
@@ -365,17 +333,53 @@ export async function removeAvatar(req: Request, res: Response): Promise<void> {
   }
 }
 
-export async function getSettings(req: Request, res: Response): Promise<void> {
+export async function changeEmail(req: Request, res: Response): Promise<void> {
   try {
     const authReq = req as AuthenticatedRequest;
     const userId = authReq.user._id;
-    const user = await userModel.findById(userId).select("settings");
+    const { email } = req.body;
+
+    const user = await userModel.findByIdAndUpdate(userId, { email }, { new: true }).select("-password");
+
     if (!user) {
       errorResponse(res, null, "User not found", StatusCodes.NOT_FOUND);
       return;
     }
-    const settings = user.settings || { orderNotifications: true, promoNotifications: false };
-    successResponse(res, settings, "Settings fetched");
+
+    successResponse(res, user, "Email updated successfully");
+  } catch (error) {
+    logger.error("Error changing email:", { error });
+    errorResponse(res, error, "Failed to change email");
+  }
+}
+
+export async function deleteAccount(req: Request, res: Response): Promise<void> {
+  try {
+    const authReq = req as AuthenticatedRequest;
+    const userId = authReq.user._id;
+
+    await userModel.findByIdAndDelete(userId);
+
+    successResponse(res, null, "Account deleted successfully");
+  } catch (error) {
+    logger.error("Error deleting account:", { error });
+    errorResponse(res, error, "Failed to delete account");
+  }
+}
+
+export async function getSettings(req: Request, res: Response): Promise<void> {
+  try {
+    const authReq = req as AuthenticatedRequest;
+    const userId = authReq.user._id;
+
+    const user = await userModel.findById(userId);
+
+    if (!user) {
+      errorResponse(res, null, "User not found", StatusCodes.NOT_FOUND);
+      return;
+    }
+
+    successResponse(res, user.settings, "Settings fetched successfully");
   } catch (error) {
     logger.error("Error fetching settings:", { error });
     errorResponse(res, error, "Failed to fetch settings");
@@ -387,60 +391,26 @@ export async function updateSettings(req: Request, res: Response): Promise<void>
     const authReq = req as AuthenticatedRequest;
     const userId = authReq.user._id;
     const { orderNotifications, promoNotifications } = req.body;
-    const user = await userModel
-      .findByIdAndUpdate(
-        userId,
-        { $set: { settings: { orderNotifications, promoNotifications } } },
-        { new: true }
-      )
-      .select("settings");
+
+    const user = await userModel.findByIdAndUpdate(
+      userId,
+      {
+        settings: {
+          orderNotifications,
+          promoNotifications,
+        },
+      },
+      { new: true }
+    );
+
     if (!user) {
       errorResponse(res, null, "User not found", StatusCodes.NOT_FOUND);
       return;
     }
-    successResponse(res, user.settings, "Settings updated");
+
+    successResponse(res, user.settings, "Settings updated successfully");
   } catch (error) {
     logger.error("Error updating settings:", { error });
     errorResponse(res, error, "Failed to update settings");
-  }
-}
-
-export async function changeEmail(req: Request, res: Response): Promise<void> {
-  try {
-    const authReq = req as AuthenticatedRequest;
-    const userId = authReq.user._id;
-    const { email, password } = req.body;
-    const user = await userModel.findById(userId);
-    if (!user || !(await user.comparePassword(password))) {
-      errorResponse(res, null, "Invalid password", StatusCodes.UNAUTHORIZED);
-      return;
-    }
-    const existing = await userModel.findOne({ email });
-    if (existing && existing._id.toString() !== userId) {
-      errorResponse(res, null, "Email already in use", StatusCodes.CONFLICT);
-      return;
-    }
-    user.email = email;
-    await user.save();
-    successResponse(res, { email }, "Email updated successfully");
-  } catch (error) {
-    errorResponse(res, error, "Failed to update email");
-  }
-}
-
-export async function deleteAccount(req: Request, res: Response): Promise<void> {
-  try {
-    const authReq = req as AuthenticatedRequest;
-    const userId = authReq.user._id;
-    const { password } = req.body;
-    const user = await userModel.findById(userId);
-    if (!user || !(await user.comparePassword(password))) {
-      errorResponse(res, null, "Invalid password", StatusCodes.UNAUTHORIZED);
-      return;
-    }
-    await userModel.findByIdAndDelete(userId);
-    successResponse(res, null, "Account deleted successfully");
-  } catch (error) {
-    errorResponse(res, error, "Failed to delete account");
   }
 }

@@ -219,7 +219,7 @@ export async function exportData(req: Request, res: Response): Promise<void> {
 // Admin Management Routes
 // ====================
 
-export async function getAdminProducts(req: Request, res: Response): Promise<void> {
+export async function getAdminProducts(_req: Request, res: Response): Promise<void> {
   try {
     const products = await productModel.find().sort({ createdAt: -1 });
     successResponse(res, products, "Products fetched successfully");
@@ -229,7 +229,7 @@ export async function getAdminProducts(req: Request, res: Response): Promise<voi
   }
 }
 
-export async function getAdminOrders(req: Request, res: Response): Promise<void> {
+export async function getAdminOrders(_req: Request, res: Response): Promise<void> {
   try {
     const orders = await orderModel
       .find()
@@ -242,7 +242,7 @@ export async function getAdminOrders(req: Request, res: Response): Promise<void>
   }
 }
 
-export async function getAdminUsers(req: Request, res: Response): Promise<void> {
+export async function getAdminUsers(_req: Request, res: Response): Promise<void> {
   try {
     const users = await userModel.find().select("-password").sort({ createdAt: -1 });
     successResponse(res, users, "Users fetched successfully");

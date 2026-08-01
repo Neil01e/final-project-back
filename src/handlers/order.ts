@@ -25,11 +25,6 @@ interface ShippingAddress {
   instructions?: string;
 }
 
-function toObjectId(id: string | string[] | undefined): Types.ObjectId {
-  if (!id || Array.isArray(id)) throw new Error("Invalid ObjectId");
-  return new Types.ObjectId(id);
-}
-
 export async function createOrder(req: Request, res: Response): Promise<void> {
   const session = await mongoose.startSession();
   session.startTransaction();

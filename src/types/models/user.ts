@@ -1,9 +1,20 @@
 import { Types } from "mongoose";
 import { UserRole, BaseDocument } from "../common.js";
 
+export interface CartItem {
+  productId: Types.ObjectId;
+  quantity: number;
+  addedAt: Date;
+}
+
 export interface UserProducts {
   purchased: Types.ObjectId[];
   favorites: Types.ObjectId[];
+}
+
+export interface UserSettings {
+  orderNotifications: boolean;
+  promoNotifications: boolean;
 }
 
 export interface IUser extends BaseDocument {
@@ -17,10 +28,8 @@ export interface IUser extends BaseDocument {
   role: UserRole;
   products: UserProducts;
   wishlist: Types.ObjectId[];
-   settings?: {
-    orderNotifications: boolean;
-    promoNotifications: boolean;
-  };
+  cart: CartItem[];
+  settings?: UserSettings;
 }
 
 export interface IUserDocument extends IUser {

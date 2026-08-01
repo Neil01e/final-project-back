@@ -1,205 +1,114 @@
-import { Request, Response } from "express";
-import { ContactMessage } from "../models/contact.js";
-import {
-  sendReplyEmail,
-  sendContactConfirmationEmail,
-} from "../services/email-service.js";
-import { type AuthenticatedRequest } from "../types/express.js";
+import type { Request, Response } from "express";
+import { StatusCodes } from "http-status-codes";
+import contactMessageModel from "../models/contact.js";
+import { errorResponse, successResponse } from "../utils/responseFormatter.js";
+import { logger } from "../utils/logger.js";
+import { sendContactConfirmationEmail, sendReplyEmail } from "../services/email-service.js";
 
-// POST /contact - Submit contact form (PUBLIC)
-export const submitContact = async (
-  req: Request,
-  res: Response,
-): Promise<void> => {
+export const submitContact = async (req: Request, res: Response): Promise<void> => {
   try {
     const { name, email, subject, message } = req.body;
 
-    // Validation
     if (!name || !email || !subject || !message) {
-      res.status(400).json({
-        success: false,
-        message: "All fields are required",
-      });
+      errorResponse(res, null, "All fields are required", StatusCodes.BAD_REQUEST);
       return;
     }
 
-    // Create contact message
-    const contactMessage = new ContactMessage({
-      name: name.trim(),
-      email: email.toLowerCase().trim(),
-      subject: subject.trim(),
-      message: message.trim(),
+    const contactMessage = await contactMessageModel.create({
+      name,
+      email,
+      subject,
+      message,
       isRead: false,
     });
-
-    await contactMessage.save();
 
     // Send confirmation email to user
     await sendContactConfirmationEmail(email, name);
 
-    res.status(201).json({
-      success: true,
-      message: "Message received! We'll get back to you soon.",
-      data: contactMessage,
-    });
+    logger.info(`Contact message created: ${contactMessage._id}`);
+    successResponse(res, contactMessage, "Message submitted successfully", StatusCodes.CREATED);
   } catch (error) {
-    console.error("Error submitting contact:", error);
-    res.status(500).json({
-      success: false,
-      message: "Error submitting message",
-    });
+    logger.error("Error submitting contact message:", { error });
+    errorResponse(res, error, "Failed to submit message");
   }
 };
 
-// GET /admin/messages - Get all contact messages (ADMIN ONLY)
-export const getAdminMessages = async (
-  req: Request,
-  res: Response,
-): Promise<void> => {
+export const getAdminMessages = async (_req: Request, res: Response): Promise<void> => {
   try {
-    const messages = await ContactMessage.find().sort({ createdAt: -1 }).lean();
+    const messages = await contactMessageModel.find().sort({ createdAt: -1 });
+    const unreadCount = await contactMessageModel.countDocuments({ isRead: false });
+    const total = await contactMessageModel.countDocuments();
 
-    const unreadCount = await ContactMessage.countDocuments({ isRead: false });
-
-    res.status(200).json({
-      success: true,
-      data: messages,
-      unreadCount,
-      total: messages.length,
-    });
+    successResponse(res, { messages, unreadCount, total }, "Messages fetched successfully");
   } catch (error) {
-    console.error("Error fetching messages:", error);
-    res.status(500).json({
-      success: false,
-      message: "Error fetching messages",
-    });
+    logger.error("Error fetching admin messages:", { error });
+    errorResponse(res, error, "Failed to fetch messages");
   }
 };
 
-// PUT /admin/messages/:id - Mark message as read (ADMIN ONLY)
-export const markMessageAsRead = async (
-  req: Request,
-  res: Response,
-): Promise<void> => {
+export const markMessageAsRead = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
 
-    const message = await ContactMessage.findByIdAndUpdate(
-      id,
-      { isRead: true },
-      { new: true },
-    );
+    const message = await contactMessageModel.findByIdAndUpdate(id, { isRead: true }, { new: true });
 
     if (!message) {
-      res.status(404).json({
-        success: false,
-        message: "Message not found",
-      });
+      errorResponse(res, null, "Message not found", StatusCodes.NOT_FOUND);
       return;
     }
 
-    res.status(200).json({
-      success: true,
-      message: "Message marked as read",
-      data: message,
-    });
+    successResponse(res, message, "Message marked as read");
   } catch (error) {
-    console.error("Error marking message as read:", error);
-    res.status(500).json({
-      success: false,
-      message: "Error updating message",
-    });
+    logger.error("Error marking message as read:", { error });
+    errorResponse(res, error, "Failed to update message");
   }
 };
 
-// DELETE /admin/messages/:id - Delete message (ADMIN ONLY)
-export const deleteMessage = async (
-  req: Request,
-  res: Response,
-): Promise<void> => {
+export const deleteMessage = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
 
-    const message = await ContactMessage.findByIdAndDelete(id);
+    const message = await contactMessageModel.findByIdAndDelete(id);
 
     if (!message) {
-      res.status(404).json({
-        success: false,
-        message: "Message not found",
-      });
+      errorResponse(res, null, "Message not found", StatusCodes.NOT_FOUND);
       return;
     }
 
-    res.status(200).json({
-      success: true,
-      message: "Message deleted successfully",
-    });
+    successResponse(res, null, "Message deleted successfully");
   } catch (error) {
-    console.error("Error deleting message:", error);
-    res.status(500).json({
-      success: false,
-      message: "Error deleting message",
-    });
+    logger.error("Error deleting message:", { error });
+    errorResponse(res, error, "Failed to delete message");
   }
 };
 
-// POST /admin/messages/:id/reply - Send reply email (ADMIN ONLY)
-export const sendReplyToMessage = async (
-  req: Request,
-  res: Response,
-): Promise<void> => {
+export const sendReplyToMessage = async (req: Request, res: Response): Promise<void> => {
   try {
     const { id } = req.params;
-    const { replyMessage } = req.body;
+    const { message } = req.body;
 
-    // Validation
-    if (!replyMessage || replyMessage.trim().length === 0) {
-      res.status(400).json({
-        success: false,
-        message: "Reply message cannot be empty",
-      });
+    if (!message) {
+      errorResponse(res, null, "Reply message is required", StatusCodes.BAD_REQUEST);
       return;
     }
 
-    // Find the contact message
-    const contactMessage = await ContactMessage.findById(id);
+    const contactMessage = await contactMessageModel.findById(id);
 
     if (!contactMessage) {
-      res.status(404).json({
-        success: false,
-        message: "Message not found",
-      });
+      errorResponse(res, null, "Message not found", StatusCodes.NOT_FOUND);
       return;
     }
 
-    // Send reply email
-    const emailSent = await sendReplyEmail(
-      contactMessage.email,
-      contactMessage.name,
-      contactMessage.subject,
-      replyMessage.trim(),
-    );
+    // Send reply email to user
+    await sendReplyEmail(contactMessage.email, contactMessage.name, contactMessage.subject, message);
 
-    if (!emailSent) {
-      res.status(500).json({
-        success: false,
-        message: "Error sending reply email",
-      });
-      return;
-    }
+    // Mark as read
+    contactMessage.isRead = true;
+    await contactMessage.save();
 
-    // Mark message as read after replying
-    await ContactMessage.findByIdAndUpdate(id, { isRead: true });
-
-    res.status(200).json({
-      success: true,
-      message: "Reply sent successfully",
-    });
+    successResponse(res, contactMessage, "Reply sent successfully");
   } catch (error) {
-    console.error("Error sending reply:", error);
-    res.status(500).json({
-      success: false,
-      message: "Error sending reply",
-    });
+    logger.error("Error sending reply:", { error });
+    errorResponse(res, error, "Failed to send reply");
   }
 };

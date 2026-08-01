@@ -16,4 +16,8 @@ Thumbs.db
 *.swp
 *.swo
 # Test coverage
-coverage/
+coverage/    
+  
+ # Uploads
+uploads/
+

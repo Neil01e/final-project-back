@@ -11,7 +11,7 @@ const userSchema = new Schema<IUserDocument>(
     phone: String,
     avatar: { type: String, default: "" },
     bio: { type: String, maxlength: 500 },
-    lastAgeChange: { type: Date, default: null },
+    lastAgeChange: { type: Date, default: null as unknown as Date },
     role: { type: String, enum: ["admin", "moderator", "user"], default: "user" },
     products: {
       favorites: [{ type: Schema.Types.ObjectId, ref: "product" }],
@@ -35,7 +35,8 @@ const userSchema = new Schema<IUserDocument>(
 
 userSchema.pre("save", async function () {
   if (this.isNew || this.isModified("password")) {
-    this.password = await bcrypt.hash(this.password, 10);
+    const doc = this as any;
+    doc.password = await bcrypt.hash(doc.password, 10);
   }
 });
 
