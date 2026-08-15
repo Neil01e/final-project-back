@@ -12,7 +12,11 @@ const userSchema = new Schema<IUserDocument>(
     avatar: { type: String, default: "" },
     bio: { type: String, maxlength: 500 },
     lastAgeChange: { type: Date, default: null as unknown as Date },
-    role: { type: String, enum: ["admin", "moderator", "user"], default: "user" },
+    role: {
+      type: String,
+      enum: ["admin", "moderator", "user"],
+      default: "user",
+    },
     products: {
       favorites: [{ type: Schema.Types.ObjectId, ref: "product" }],
       purchased: [{ type: Schema.Types.ObjectId, ref: "product" }],
@@ -20,7 +24,11 @@ const userSchema = new Schema<IUserDocument>(
     wishlist: [{ type: Schema.Types.ObjectId, ref: "product" }],
     cart: [
       {
-        productId: { type: Schema.Types.ObjectId, ref: "product", required: true },
+        productId: {
+          type: Schema.Types.ObjectId,
+          ref: "product",
+          required: true,
+        },
         quantity: { type: Number, default: 1, min: 1 },
         addedAt: { type: Date, default: Date.now },
       },
@@ -30,7 +38,7 @@ const userSchema = new Schema<IUserDocument>(
       promoNotifications: { type: Boolean, default: false },
     },
   },
-  { timestamps: true, toJSON: { versionKey: false } }
+  { timestamps: true, toJSON: { versionKey: false } },
 );
 
 userSchema.pre("save", async function () {
@@ -40,7 +48,9 @@ userSchema.pre("save", async function () {
   }
 });
 
-userSchema.methods.comparePassword = async function (requestedPassword: string): Promise<boolean> {
+userSchema.methods.comparePassword = async function (
+  requestedPassword: string,
+): Promise<boolean> {
   return bcrypt.compare(requestedPassword, this.password);
 };
 

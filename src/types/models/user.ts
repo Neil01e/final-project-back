@@ -25,6 +25,7 @@ export interface IUser extends BaseDocument {
   phone?: string;
   avatar?: string;
   bio?: string;
+  lastAgeChange?: Date | null;
   role: UserRole;
   products: UserProducts;
   wishlist: Types.ObjectId[];

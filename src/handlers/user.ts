@@ -25,17 +25,22 @@ export async function getProfile(req: Request, res: Response): Promise<void> {
   }
 }
 
-export async function updateProfile(req: Request, res: Response): Promise<void> {
+export async function updateProfile(
+  req: Request,
+  res: Response,
+): Promise<void> {
   try {
     const authReq = req as AuthenticatedRequest;
     const userId = authReq.user._id;
     const { firstName, lastName, phone, bio } = req.body;
 
-    const user = await userModel.findByIdAndUpdate(
-      userId,
-      { firstName, lastName, phone, bio },
-      { new: true }
-    ).select("-password");
+    const user = await userModel
+      .findByIdAndUpdate(
+        userId,
+        { firstName, lastName, phone, bio },
+        { new: true },
+      )
+      .select("-password");
 
     if (!user) {
       errorResponse(res, null, "User not found", StatusCodes.NOT_FOUND);
@@ -79,7 +84,9 @@ export async function getCart(req: Request, res: Response): Promise<void> {
     const authReq = req as AuthenticatedRequest;
     const userId = authReq.user._id;
 
-    const user = await userModel.findById(userId).populate("cart.productId", "title price coverImage");
+    const user = await userModel
+      .findById(userId)
+      .populate("cart.productId", "title price coverImage");
 
     if (!user) {
       errorResponse(res, null, "User not found", StatusCodes.NOT_FOUND);
@@ -106,7 +113,9 @@ export async function addToCart(req: Request, res: Response): Promise<void> {
       return;
     }
 
-    const existingItem = user.cart?.find((item) => item.productId.toString() === productId);
+    const existingItem = user.cart?.find(
+      (item) => item.productId.toString() === productId,
+    );
 
     if (existingItem) {
       existingItem.quantity += quantity;
@@ -119,7 +128,9 @@ export async function addToCart(req: Request, res: Response): Promise<void> {
     }
 
     await user.save();
-    const updatedUser = await userModel.findById(userId).populate("cart.productId");
+    const updatedUser = await userModel
+      .findById(userId)
+      .populate("cart.productId");
 
     successResponse(res, updatedUser?.cart, "Item added to cart");
   } catch (error) {
@@ -128,7 +139,10 @@ export async function addToCart(req: Request, res: Response): Promise<void> {
   }
 }
 
-export async function updateCartItem(req: Request, res: Response): Promise<void> {
+export async function updateCartItem(
+  req: Request,
+  res: Response,
+): Promise<void> {
   try {
     const authReq = req as AuthenticatedRequest;
     const { productId } = req.params;
@@ -142,7 +156,9 @@ export async function updateCartItem(req: Request, res: Response): Promise<void>
       return;
     }
 
-    const cartItem = user.cart?.find((item) => item.productId.toString() === productId);
+    const cartItem = user.cart?.find(
+      (item) => item.productId.toString() === productId,
+    );
 
     if (!cartItem) {
       errorResponse(res, null, "Item not found in cart", StatusCodes.NOT_FOUND);
@@ -152,7 +168,9 @@ export async function updateCartItem(req: Request, res: Response): Promise<void>
     cartItem.quantity = quantity;
     await user.save();
 
-    const updatedUser = await userModel.findById(userId).populate("cart.productId");
+    const updatedUser = await userModel
+      .findById(userId)
+      .populate("cart.productId");
 
     if (!updatedUser) {
       errorResponse(res, null, "User not found", StatusCodes.NOT_FOUND);
@@ -172,7 +190,10 @@ export async function updateCartItem(req: Request, res: Response): Promise<void>
   }
 }
 
-export async function removeFromCart(req: Request, res: Response): Promise<void> {
+export async function removeFromCart(
+  req: Request,
+  res: Response,
+): Promise<void> {
   try {
     const authReq = req as AuthenticatedRequest;
     const { productId } = req.params;
@@ -185,10 +206,14 @@ export async function removeFromCart(req: Request, res: Response): Promise<void>
       return;
     }
 
-    user.cart = user.cart?.filter((item) => item.productId.toString() !== productId) || [];
+    user.cart =
+      user.cart?.filter((item) => item.productId.toString() !== productId) ||
+      [];
     await user.save();
 
-    const updatedUser = await userModel.findById(userId).populate("cart.productId");
+    const updatedUser = await userModel
+      .findById(userId)
+      .populate("cart.productId");
 
     if (!updatedUser) {
       errorResponse(res, null, "User not found", StatusCodes.NOT_FOUND);
@@ -235,10 +260,13 @@ export async function getWishlist(req: Request, res: Response): Promise<void> {
   }
 }
 
-export async function addToWishlist(req: Request, res: Response): Promise<void> {
+export async function addToWishlist(
+  req: Request,
+  res: Response,
+): Promise<void> {
   try {
     const authReq = req as AuthenticatedRequest;
-    const { id } = req.params;
+    const id = req.params.id as string;
     const userId = authReq.user._id;
 
     const user = await userModel.findById(userId);
@@ -261,7 +289,10 @@ export async function addToWishlist(req: Request, res: Response): Promise<void> 
   }
 }
 
-export async function removeFromWishlist(req: Request, res: Response): Promise<void> {
+export async function removeFromWishlist(
+  req: Request,
+  res: Response,
+): Promise<void> {
   try {
     const authReq = req as AuthenticatedRequest;
     const { id } = req.params;
@@ -296,9 +327,9 @@ export async function updateAvatar(req: Request, res: Response): Promise<void> {
     }
 
     const avatarUrl = `/uploads/${req.file.filename}`;
-    const user = await userModel.findByIdAndUpdate(userId, { avatar: avatarUrl }, { new: true }).select(
-      "-password"
-    );
+    const user = await userModel
+      .findByIdAndUpdate(userId, { avatar: avatarUrl }, { new: true })
+      .select("-password");
 
     if (!user) {
       errorResponse(res, null, "User not found", StatusCodes.NOT_FOUND);
@@ -317,9 +348,9 @@ export async function removeAvatar(req: Request, res: Response): Promise<void> {
     const authReq = req as AuthenticatedRequest;
     const userId = authReq.user._id;
 
-    const user = await userModel.findByIdAndUpdate(userId, { avatar: "" }, { new: true }).select(
-      "-password"
-    );
+    const user = await userModel
+      .findByIdAndUpdate(userId, { avatar: "" }, { new: true })
+      .select("-password");
 
     if (!user) {
       errorResponse(res, null, "User not found", StatusCodes.NOT_FOUND);
@@ -339,7 +370,9 @@ export async function changeEmail(req: Request, res: Response): Promise<void> {
     const userId = authReq.user._id;
     const { email } = req.body;
 
-    const user = await userModel.findByIdAndUpdate(userId, { email }, { new: true }).select("-password");
+    const user = await userModel
+      .findByIdAndUpdate(userId, { email }, { new: true })
+      .select("-password");
 
     if (!user) {
       errorResponse(res, null, "User not found", StatusCodes.NOT_FOUND);
@@ -353,7 +386,10 @@ export async function changeEmail(req: Request, res: Response): Promise<void> {
   }
 }
 
-export async function deleteAccount(req: Request, res: Response): Promise<void> {
+export async function deleteAccount(
+  req: Request,
+  res: Response,
+): Promise<void> {
   try {
     const authReq = req as AuthenticatedRequest;
     const userId = authReq.user._id;
@@ -386,7 +422,10 @@ export async function getSettings(req: Request, res: Response): Promise<void> {
   }
 }
 
-export async function updateSettings(req: Request, res: Response): Promise<void> {
+export async function updateSettings(
+  req: Request,
+  res: Response,
+): Promise<void> {
   try {
     const authReq = req as AuthenticatedRequest;
     const userId = authReq.user._id;
@@ -400,7 +439,7 @@ export async function updateSettings(req: Request, res: Response): Promise<void>
           promoNotifications,
         },
       },
-      { new: true }
+      { new: true },
     );
 
     if (!user) {
